@@ -8,7 +8,11 @@ KUBECTL_VERSION ?= v1.30.14
 all: install
 
 .PHONY: install
+ifeq ($(shell command -v az 2>/dev/null),)
 install: $(LOCALBIN)/go-bindata $(LOCALBIN)/gox $(LOCALBIN)/ginkgo $(LOCALBIN)/golangci-lint $(LOCALBIN)/pub $(LOCALBIN)/mockgen apt-get-install shellcheck azure-cli kubectl azcopy
+else
+install: $(LOCALBIN)/go-bindata $(LOCALBIN)/gox $(LOCALBIN)/ginkgo $(LOCALBIN)/golangci-lint $(LOCALBIN)/pub $(LOCALBIN)/mockgen apt-get-install shellcheck kubectl azcopy
+endif
 
 $(LOCALBIN)/go-bindata:
 	GOBIN=$(LOCALBIN) $(GO) install github.com/go-bindata/go-bindata/go-bindata@v3.1.2
@@ -64,17 +68,15 @@ shellcheck:
 	curl -sSL https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/shellcheck-$(SHELLCHECK_VERSION).linux.x86_64.tar.xz | tar -vxJ -C $(LOCALBIN) --strip=1
 
 azure-cli:
-	@if ! command -v az >/dev/null 2>&1; then \
-		apt-get update; \
-		apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release; \
-		mkdir -p /etc/apt/keyrings; \
-		curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/keyrings/microsoft.gpg > /dev/null; \
-		chmod go+r /etc/apt/keyrings/microsoft.gpg; \
-		echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bullseye main" | tee /etc/apt/sources.list.d/azure-cli.list; \
-		apt-get update; \
-		apt-get install -y --allow-downgrades --no-install-recommends azure-cli=$(AZCLI_VERSION)-1~bullseye; \
-		apt-mark hold azure-cli; \
-	fi
+	apt-get update
+	apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release
+	mkdir -p /etc/apt/keyrings
+	curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+	chmod go+r /etc/apt/keyrings/microsoft.gpg
+	echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bullseye main" | tee /etc/apt/sources.list.d/azure-cli.list
+	apt-get update
+	apt-get install -y --allow-downgrades --no-install-recommends azure-cli=$(AZCLI_VERSION)-1~bullseye
+	apt-mark hold azure-cli
 
 .PHONY: kubectl
 kubectl:
