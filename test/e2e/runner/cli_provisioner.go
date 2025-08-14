@@ -32,19 +32,21 @@ import (
 
 // CLIProvisioner holds the configuration needed to provision a clusters
 type CLIProvisioner struct {
-	ClusterDefinition string `envconfig:"CLUSTER_DEFINITION" required:"true" default:"examples/kubernetes.json"` // ClusterDefinition is the path on disk to the json template these are normally located in examples/
-	ProvisionRetries  int    `envconfig:"PROVISION_RETRIES" default:"0"`
-	CreateVNET        bool   `envconfig:"CREATE_VNET" default:"false"`
-	ExistingVNET      bool   `envconfig:"EXISTING_VNET" default:"false"`
-	MasterVMSS        bool   `envconfig:"MASTER_VMSS" default:"false"`
-	Config            *config.Config
-	Account           *azure.Account
-	Point             *metrics.Point
-	ResourceGroups    []string
-	Engine            *engine.Engine
-	Masters           []azure.VM
-	Agents            []azure.VM
-	ExistingVNETName  string `envconfig:"EXISTING_VNET_NAME" default:""`
+	ClusterDefinition         string `envconfig:"CLUSTER_DEFINITION" required:"true" default:"examples/kubernetes.json"` // ClusterDefinition is the path on disk to the json template these are normally located in examples/
+	ProvisionRetries          int    `envconfig:"PROVISION_RETRIES" default:"0"`
+	CreateVNET                bool   `envconfig:"CREATE_VNET" default:"false"`
+	ExistingVNET              bool   `envconfig:"EXISTING_VNET" default:"false"`
+	MasterVMSS                bool   `envconfig:"MASTER_VMSS" default:"false"`
+	Config                    *config.Config
+	Account                   *azure.Account
+	Point                     *metrics.Point
+	ResourceGroups            []string
+	Engine                    *engine.Engine
+	Masters                   []azure.VM
+	Agents                    []azure.VM
+	ExistingVNETName          string `envconfig:"EXISTING_VNET_NAME" default:"AKSeVNet"`
+	ExistingVNETResourceGroup string `envconfig:"EXISTING_VNET_RESOURCE_GROUP" default:"AKSeVirtualNetwork"`
+	ExistingVNETLocation      string `envconfig:"EXISTING_VNET_LOCATION" default:"eastus2"`
 }
 
 // BuildCLIProvisioner will return a ProvisionerConfig object which is used to run a provision
@@ -218,9 +220,8 @@ func (cli *CLIProvisioner) provision() error {
 
 	if cli.ExistingVNET {
 		// Configure for existing VNET
-		cli.Account.ResourceGroup.Name = "AKSeVirtualNetwork"
-		cli.Account.ResourceGroup.Location = "eastus2"
-		cli.ExistingVNETName = "AKSeVNet"
+		cli.Account.ResourceGroup.Name = cli.ExistingVNETResourceGroup
+		cli.Account.ResourceGroup.Location = cli.ExistingVNETLocation
 		vnetName = cli.ExistingVNETName
 		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, masterSubnetName)
 		
@@ -521,13 +522,13 @@ func (cli *CLIProvisioner) EnsureArcResourceGroup() error {
 
 // CleanupCreatedSubnets removes subnets that were created during the test run
 func (cli *CLIProvisioner) CleanupCreatedSubnets() error {
-	if !cli.ExistingVNET || cli.ExistingVNETName == "" {
+	if !cli.ExistingVNET {
 		log.Println("No subnets to cleanup or not using existing VNET")
 		return nil
 	}
 
-	log.Printf("Cleaning up subnets containing 'CustomSubnet' from VNET %s", cli.ExistingVNETName)
-	
+	log.Printf("Cleaning up subnets from VNET %s", cli.ExistingVNETName)
+
 	// Get list of custom subnets
 	customSubnets, err := cli.Account.GetCustomSubnets(cli.ExistingVNETName)
 	if err != nil {
