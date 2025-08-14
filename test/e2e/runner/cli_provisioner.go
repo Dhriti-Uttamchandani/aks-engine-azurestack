@@ -44,6 +44,9 @@ type CLIProvisioner struct {
 	Engine            *engine.Engine
 	Masters           []azure.VM
 	Agents            []azure.VM
+	ExistingVNETResourceGroup = "AKSeVirtualNetwork"
+	ExistingVNETLocation      = "eastus2"
+	ExistingVNETName          = "AKSeVNet"
 }
 
 // BuildCLIProvisioner will return a ProvisionerConfig object which is used to run a provision
@@ -216,8 +219,12 @@ func (cli *CLIProvisioner) provision() error {
 	}
 
 	if cli.ExistingVNET {
-		cli.Account.ResourceGroup.Name = "AKSeVirtualNetwork"
-		cli.Account.ResourceGroup.Location = "eastus2"
+		// Configure for existing VNET
+		cli.Account.ResourceGroup.Name = cli.ExistingVNETResourceGroup
+		cli.Account.ResourceGroup.Location = cli.ExistingVNETLocation
+		vnetName = cli.ExistingVNETName
+		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, masterSubnetName)
+		
 		if cli.MasterVMSS {
 			agentSubnetName := fmt.Sprintf("%sCustomSubnetAgent", cli.Config.Name)
 			err = cli.Account.ExistingVnet(vnetName)
@@ -248,7 +255,8 @@ func (cli *CLIProvisioner) provision() error {
 			subnets = append(subnets, masterSubnetName)
 			for i, pool := range cs.ContainerService.Properties.AgentPoolProfiles {
 				subnetName := fmt.Sprintf("%sCustomSubnet", pool.Name)
-				err = cli.Account.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", i*16), 30*time.Second, cli.Config.Timeout)
+				// Start from 11.0.16.0/20 to avoid conflict with existing 11.0.0.0/24 existing subnet
+				err = cli.Account.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", (i+1)*16), 30*time.Second, cli.Config.Timeout)
 				if err != nil {
 					return errors.Errorf("Error trying to create subnet:%s", err.Error())
 				}
@@ -509,5 +517,42 @@ func (cli *CLIProvisioner) EnsureArcResourceGroup() error {
 			}
 		}
 	}
+	return nil
+}
+
+// CleanupCreatedSubnets removes subnets that were created during the test run
+func (cli *CLIProvisioner) CleanupCreatedSubnets() error {
+	if !cli.ExistingVNET || cli.ExistingVNETName == "" {
+		log.Println("No subnets to cleanup or not using existing VNET")
+		return nil
+	}
+
+	log.Printf("Cleaning up subnets containing 'CustomSubnet' from VNET %s", cli.ExistingVNETName)
+	
+	// Get list of custom subnets
+	customSubnets, err := cli.Account.GetCustomSubnets(cli.ExistingVNETName)
+	if err != nil {
+		return errors.Errorf("Failed to get custom subnets from VNET %s: %v", cli.ExistingVNETName, err)
+	}
+	
+	if len(customSubnets) == 0 {
+		log.Println("No custom subnets found to cleanup")
+		return nil
+	}
+	
+	log.Printf("Found %d custom subnets to delete", len(customSubnets))
+	
+	// Delete subnets sequentially
+	for _, subnet := range customSubnets {
+		log.Printf("Deleting subnet: %s", subnet)
+		err := cli.Account.DeleteSubnet(cli.ExistingVNETName, subnet)
+		if err != nil {
+			log.Printf("Warning: Failed to delete subnet %s: %v", subnet, err)
+		} else {
+			log.Printf("Successfully deleted subnet: %s", subnet)
+		}
+	}
+	
+	log.Printf("Cleanup completed for VNET %s", cli.ExistingVNETName)
 	return nil
 }

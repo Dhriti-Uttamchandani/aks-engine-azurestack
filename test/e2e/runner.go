@@ -287,7 +287,16 @@ func teardown() {
 		}
 	}
 	if cfg.CleanUpOnExit {
+		// Clean up created subnets (only for existing VNET scenarios)
+		if err := cliProvisioner.CleanupCreatedSubnets(); err != nil {
+			log.Printf("Warning: Failed to cleanup created subnets: %v", err)
+		}
+		// Delete resource groups, but skip the existing VNET resource group
 		for _, rg := range rgs {
+			if cliProvisioner.ExistingVNETResourceGroup != "" && rg == cliProvisioner.ExistingVNETResourceGroup {
+				log.Printf("Skipping deletion of existing VNET resource group: %s", rg)
+				continue
+			}
 			log.Printf("Deleting Group: %s\n", rg)
 			acct.DeleteGroup(rg, false)
 		}

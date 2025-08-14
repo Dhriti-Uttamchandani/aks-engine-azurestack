@@ -474,6 +474,56 @@ func (a *Account) CreateSubnet(vnet, subnetName, subnetPrefix string) error {
 	return nil
 }
 
+// DeleteSubnet will delete a subnet from a vnet in a resource group
+func (a *Account) DeleteSubnet(vnet, subnetName string) error {
+	var cmd *exec.Cmd
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "vnet", "subnet", "delete", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName)
+	} else {
+		cmd = exec.Command("az", "network", "vnet", "subnet", "delete", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName)
+	}
+	util.PrintCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error while trying to delete subnet from vnet with the following command:\n az network vnet subnet delete -g %s --vnet-name %s --name %s \n Output:%s\n", a.ResourceGroup.Name, vnet, subnetName, out)
+		return err
+	}
+	return nil
+}
+
+// GetCustomSubnets will list subnets in a vnet that contain "CustomSubnet" in their name
+func (a *Account) GetCustomSubnets(vnet string) ([]string, error) {
+	var cmd *exec.Cmd
+	// Use Azure CLI query to filter subnets containing "CustomSubnet" at source - more efficient than client-side filtering
+	query := "[?contains(name, 'CustomSubnet')].name"
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "vnet", "subnet", "list", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--query", query, "-o", "json")
+	} else {
+		cmd = exec.Command("az", "network", "vnet", "subnet", "list", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--query", query, "-o", "json")
+	}
+	util.PrintCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error while trying to list custom subnets from vnet with the following command:\n az network vnet subnet list -g %s --vnet-name %s --query \"%s\" -o json \n Output:%s\n", a.ResourceGroup.Name, vnet, query, out)
+		return nil, err
+	}
+
+	// Parse JSON output into string slice
+	var subnets []string
+	err = json.Unmarshal(out, &subnets)
+	if err != nil {
+		log.Printf("Error unmarshalling subnet names json:%s\n", err)
+		log.Printf("JSON:%s\n", out)
+		return nil, err
+	}
+
+	return subnets, nil
+}
+
 // RouteTable holds information from running az network route-table list
 type RouteTable struct {
 	ID                string `json:"id"`
