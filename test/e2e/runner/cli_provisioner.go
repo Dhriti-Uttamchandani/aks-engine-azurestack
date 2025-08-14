@@ -44,9 +44,7 @@ type CLIProvisioner struct {
 	Engine            *engine.Engine
 	Masters           []azure.VM
 	Agents            []azure.VM
-	ExistingVNETResourceGroup = "AKSeVirtualNetwork"
-	ExistingVNETLocation      = "eastus2"
-	ExistingVNETName          = "AKSeVNet"
+	ExistingVNETName  string `envconfig:"EXISTING_VNET_NAME" default:""`
 }
 
 // BuildCLIProvisioner will return a ProvisionerConfig object which is used to run a provision
@@ -220,8 +218,9 @@ func (cli *CLIProvisioner) provision() error {
 
 	if cli.ExistingVNET {
 		// Configure for existing VNET
-		cli.Account.ResourceGroup.Name = cli.ExistingVNETResourceGroup
-		cli.Account.ResourceGroup.Location = cli.ExistingVNETLocation
+		cli.Account.ResourceGroup.Name = "AKSeVirtualNetwork"
+		cli.Account.ResourceGroup.Location = "eastus2"
+		cli.ExistingVNETName = "AKSeVNet"
 		vnetName = cli.ExistingVNETName
 		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, masterSubnetName)
 		
