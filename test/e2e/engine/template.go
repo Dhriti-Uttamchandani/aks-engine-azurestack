@@ -56,6 +56,7 @@ type Config struct {
 	OrchestratorVersion              string `envconfig:"ORCHESTRATOR_VERSION" default:""`
 	OutputDirectory                  string `envconfig:"OUTPUT_DIR" default:"_output"`
 	CreateVNET                       bool   `envconfig:"CREATE_VNET" default:"false"`
+	ExistingVNET                     bool   `envconfig:"EXISTING_VNET" default:"false"`
 	EnableKMSEncryption              bool   `envconfig:"ENABLE_KMS_ENCRYPTION" default:"false"`
 	Distro                           string `envconfig:"DISTRO" default:""`
 	SubscriptionID                   string `envconfig:"SUBSCRIPTION_ID" required:"true"`
@@ -282,7 +283,7 @@ func Build(cfg *config.Config, masterSubnetID string, agentSubnetIDs []string, i
 		}
 	}
 
-	if config.CreateVNET {
+	if config.CreateVNET || config.ExistingVNET {
 		if isVMSS {
 			prop.MasterProfile.VnetSubnetID = masterSubnetID
 			prop.MasterProfile.AgentVnetSubnetID = agentSubnetIDs[0]

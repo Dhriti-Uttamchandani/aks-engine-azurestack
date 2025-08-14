@@ -35,6 +35,7 @@ type CLIProvisioner struct {
 	ClusterDefinition string `envconfig:"CLUSTER_DEFINITION" required:"true" default:"examples/kubernetes.json"` // ClusterDefinition is the path on disk to the json template these are normally located in examples/
 	ProvisionRetries  int    `envconfig:"PROVISION_RETRIES" default:"0"`
 	CreateVNET        bool   `envconfig:"CREATE_VNET" default:"false"`
+	ExistingVNET      bool   `envconfig:"EXISTING_VNET" default:"false"`
 	MasterVMSS        bool   `envconfig:"MASTER_VMSS" default:"false"`
 	Config            *config.Config
 	Account           *azure.Account
@@ -214,10 +215,54 @@ func (cli *CLIProvisioner) provision() error {
 		}
 	}
 
+	if cli.ExistingVNET {
+		cli.Account.ResourceGroup.Name = "AKSeVirtualNetwork"
+		cli.Account.ResourceGroup.Location = "eastus2"
+		if cli.MasterVMSS {
+			agentSubnetName := fmt.Sprintf("%sCustomSubnetAgent", cli.Config.Name)
+			err = cli.Account.ExistingVnet(vnetName)
+			if err != nil {
+				return errors.Errorf("Error trying to show vnet:%s", err.Error())
+			}
+			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.1.0/17", 30*time.Second, cli.Config.Timeout)
+			if err != nil {
+				return errors.Errorf("Error trying to create subnet:%s", err.Error())
+			}
+			subnets = append(subnets, masterSubnetName)
+			err = cli.Account.CreateSubnetWithRetry(vnetName, agentSubnetName, "11.0.128.0/17", 30*time.Second, cli.Config.Timeout)
+			if err != nil {
+				return errors.Errorf("Error trying to create subnet in subnet:%s", err.Error())
+			}
+			subnets = append(subnets, agentSubnetName)
+			agentSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, agentSubnetName)
+
+		} else {
+			err = cli.Account.ExistingVnet(vnetName)
+			if err != nil {
+				return errors.Errorf("Error trying to show vnet:%s", err.Error())
+			}
+			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.1.0/24", 30*time.Second, cli.Config.Timeout)
+			if err != nil {
+				return errors.Errorf("Error trying to create subnet:%s", err.Error())
+			}
+			subnets = append(subnets, masterSubnetName)
+			for i, pool := range cs.ContainerService.Properties.AgentPoolProfiles {
+				subnetName := fmt.Sprintf("%sCustomSubnet", pool.Name)
+				err = cli.Account.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", i*16), 30*time.Second, cli.Config.Timeout)
+				if err != nil {
+					return errors.Errorf("Error trying to create subnet:%s", err.Error())
+				}
+				subnets = append(subnets, subnetName)
+				subnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, subnetName)
+				agentSubnetIDs = append(agentSubnetIDs, subnetID)
+			}
+		}
+	}
+
 	// Lets modify our template and call aks-engine-azurestack generate on it
 	var eng *engine.Engine
 
-	if cli.CreateVNET && cli.MasterVMSS {
+	if (cli.CreateVNET && cli.MasterVMSS) || (cli.ExistingVNET && cli.MasterVMSS) {
 		eng, err = engine.Build(cli.Config, masterSubnetID, []string{agentSubnetID}, true)
 	} else {
 		eng, err = engine.Build(cli.Config, masterSubnetID, agentSubnetIDs, false)
@@ -241,7 +286,7 @@ func (cli *CLIProvisioner) provision() error {
 	}
 
 	if cs.Properties.OrchestratorProfile != nil && cs.Properties.OrchestratorProfile.KubernetesConfig != nil {
-		if cli.CreateVNET && cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == "kubenet" {
+		if (cli.CreateVNET && cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == "kubenet") || (cli.ExistingVNET && cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == "kubenet") {
 			routeTable, err := cli.Account.GetRGRouteTable(10 * time.Minute)
 			if err != nil {
 				return errors.Errorf("Error trying to get route table in VNET: %s", err.Error())

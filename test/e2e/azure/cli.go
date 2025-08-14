@@ -318,6 +318,23 @@ func (a *Account) CreateVnet(vnet, addressPrefixes string) error {
 	return nil
 }
 
+// ExistingVnet will check if vnet exists in a resource group
+func (a *Account) ExistingVnet(name string) error {
+	var cmd *exec.Cmd
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "vnet", "show", "-g", a.ResourceGroup.Name, "-n", name)
+	} else {
+		cmd = exec.Command("az", "network", "vnet", "show", "-g", a.ResourceGroup.Name, "-n", name)
+	}
+	util.PrintCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error while trying to show vnet with the following command:\n az network vnet show -g %s -n %s\n Output:%s\n", a.ResourceGroup.Name, name, out)
+		return err
+	}
+	return nil
+}
+
 // ListRGRouteTableResult defines a struct for making a multi-value channel result type
 type ListRGRouteTableResult struct {
 	routeTables []network.RouteTable
