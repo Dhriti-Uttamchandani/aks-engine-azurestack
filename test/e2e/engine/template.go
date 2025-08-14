@@ -296,6 +296,13 @@ func Build(cfg *config.Config, masterSubnetID string, agentSubnetIDs []string, i
 				p.VnetSubnetID = agentSubnetIDs[i]
 			}
 		}
+		
+		// Set VnetCidr based on the VNET scenario
+		if config.CreateVNET {
+			prop.MasterProfile.VnetCidr = "10.239.0.0/16"
+		} else if config.ExistingVNET {
+			prop.MasterProfile.VnetCidr = "11.0.0.0/16"
+		}
 	}
 
 	if config.ClientObjectID != "" {
