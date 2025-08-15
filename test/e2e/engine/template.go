@@ -298,6 +298,10 @@ func Build(cfg *config.Config, masterSubnetID string, agentSubnetIDs []string, i
 		}
 	}
 
+	if config.ExistingVNET {
+		prop.MasterProfile.VnetCidr = "11.0.0.0/16"     // Matches the subnet range used in existing VNET scenario
+	}
+
 	if config.ClientObjectID != "" {
 		if prop.ServicePrincipalProfile == nil {
 			prop.ServicePrincipalProfile = &vlabs.ServicePrincipalProfile{}

@@ -219,36 +219,40 @@ func (cli *CLIProvisioner) provision() error {
 	}
 
 	if cli.ExistingVNET {
-		// Configure for existing VNET
-		cli.Account.ResourceGroup.Name = cli.ExistingVNETResourceGroup
-		cli.Account.ResourceGroup.Location = cli.ExistingVNETLocation
+		// Create account config for existing VNET's resource group
+		existingVnetAccount := *cli.Account
+		existingVnetAccount.ResourceGroup.Name = cli.ExistingVNETResourceGroup
+		existingVnetAccount.ResourceGroup.Location = cli.ExistingVNETLocation
 		vnetName = cli.ExistingVNETName
-		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, masterSubnetName)
-		
+		// Subnet IDs point to existing VNET's resource group, but cluster stays in its own RG
+		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", existingVnetAccount.SubscriptionID, existingVnetAccount.ResourceGroup.Name, vnetName, masterSubnetName)
+
 		if cli.MasterVMSS {
 			agentSubnetName := fmt.Sprintf("%sCustomSubnetAgent", cli.Config.Name)
 			err = cli.Account.ExistingVnet(vnetName)
 			if err != nil {
 				return errors.Errorf("Error trying to show vnet:%s", err.Error())
 			}
-			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.1.0/17", 30*time.Second, cli.Config.Timeout)
+			// Create subnets in existing VNET's resource group
+			err = existingVnetAccount.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.1.0/17", 30*time.Second, cli.Config.Timeout)
 			if err != nil {
 				return errors.Errorf("Error trying to create subnet:%s", err.Error())
 			}
 			subnets = append(subnets, masterSubnetName)
-			err = cli.Account.CreateSubnetWithRetry(vnetName, agentSubnetName, "11.0.128.0/17", 30*time.Second, cli.Config.Timeout)
+			err = existingVnetAccount.CreateSubnetWithRetry(vnetName, agentSubnetName, "11.0.128.0/17", 30*time.Second, cli.Config.Timeout)
 			if err != nil {
 				return errors.Errorf("Error trying to create subnet in subnet:%s", err.Error())
 			}
 			subnets = append(subnets, agentSubnetName)
-			agentSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, agentSubnetName)
+			agentSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", existingVnetAccount.SubscriptionID, existingVnetAccount.ResourceGroup.Name, vnetName, agentSubnetName)
 
 		} else {
 			err = cli.Account.ExistingVnet(vnetName)
 			if err != nil {
 				return errors.Errorf("Error trying to show vnet:%s", err.Error())
 			}
-			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.255.0/24", 30*time.Second, cli.Config.Timeout)
+			// Create subnets in existing VNET's resource group
+			err = existingVnetAccount.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.255.0/24", 30*time.Second, cli.Config.Timeout)
 			if err != nil {
 				return errors.Errorf("Error trying to create subnet:%s", err.Error())
 			}
@@ -256,12 +260,12 @@ func (cli *CLIProvisioner) provision() error {
 			for i, pool := range cs.ContainerService.Properties.AgentPoolProfiles {
 				subnetName := fmt.Sprintf("%sCustomSubnet", pool.Name)
 				// Start from 11.0.16.0/20 to avoid conflict with existing 11.0.0.0/24 subnet
-				err = cli.Account.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", (i+1)*16), 30*time.Second, cli.Config.Timeout)
+				err = existingVnetAccount.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", (i+1)*16), 30*time.Second, cli.Config.Timeout)
 				if err != nil {
 					return errors.Errorf("Error trying to create subnet:%s", err.Error())
 				}
 				subnets = append(subnets, subnetName)
-				subnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", cli.Account.SubscriptionID, cli.Account.ResourceGroup.Name, vnetName, subnetName)
+				subnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", existingVnetAccount.SubscriptionID, existingVnetAccount.ResourceGroup.Name, vnetName, subnetName)
 				agentSubnetIDs = append(agentSubnetIDs, subnetID)
 			}
 		}
