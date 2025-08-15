@@ -229,7 +229,7 @@ func (cli *CLIProvisioner) provision() error {
 
 		if cli.MasterVMSS {
 			agentSubnetName := fmt.Sprintf("%sCustomSubnetAgent", cli.Config.Name)
-			err = cli.Account.ExistingVnet(vnetName)
+			err = existingVnetAccount.ExistingVnet(vnetName)
 			if err != nil {
 				return errors.Errorf("Error trying to show vnet:%s", err.Error())
 			}
@@ -245,9 +245,8 @@ func (cli *CLIProvisioner) provision() error {
 			}
 			subnets = append(subnets, agentSubnetName)
 			agentSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", existingVnetAccount.SubscriptionID, existingVnetAccount.ResourceGroup.Name, vnetName, agentSubnetName)
-
 		} else {
-			err = cli.Account.ExistingVnet(vnetName)
+			err = existingVnetAccount.ExistingVnet(vnetName)
 			if err != nil {
 				return errors.Errorf("Error trying to show vnet:%s", err.Error())
 			}
@@ -303,7 +302,12 @@ func (cli *CLIProvisioner) provision() error {
 			if err != nil {
 				return errors.Errorf("Error trying to get route table in VNET: %s", err.Error())
 			}
-			err = cli.Account.AddSubnetsToRouteTable(*routeTable.ID, vnetName, subnets)
+			// For existing VNET, use the existing VNET account to update subnets in the correct resource group
+			if cli.ExistingVNET {
+				err = existingVnetAccount.AddSubnetsToRouteTable(*routeTable.ID, vnetName, subnets)
+			} else {
+				err = cli.Account.AddSubnetsToRouteTable(*routeTable.ID, vnetName, subnets)
+			}
 			if err != nil {
 				return errors.Errorf("Error trying to add subnets to route table %s in VNET: %s", *routeTable.ID, err.Error())
 			}
