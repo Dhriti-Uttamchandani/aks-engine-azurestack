@@ -248,14 +248,14 @@ func (cli *CLIProvisioner) provision() error {
 			if err != nil {
 				return errors.Errorf("Error trying to show vnet:%s", err.Error())
 			}
-			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.1.0/24", 30*time.Second, cli.Config.Timeout)
+			err = cli.Account.CreateSubnetWithRetry(vnetName, masterSubnetName, "11.0.255.0/24", 30*time.Second, cli.Config.Timeout)
 			if err != nil {
 				return errors.Errorf("Error trying to create subnet:%s", err.Error())
 			}
 			subnets = append(subnets, masterSubnetName)
 			for i, pool := range cs.ContainerService.Properties.AgentPoolProfiles {
 				subnetName := fmt.Sprintf("%sCustomSubnet", pool.Name)
-				// Start from 11.0.16.0/20 to avoid conflict with existing 11.0.0.0/24 existing subnet
+				// Start from 11.0.16.0/20 to avoid conflict with existing 11.0.0.0/24 subnet
 				err = cli.Account.CreateSubnetWithRetry(vnetName, subnetName, fmt.Sprintf("11.0.%d.0/20", (i+1)*16), 30*time.Second, cli.Config.Timeout)
 				if err != nil {
 					return errors.Errorf("Error trying to create subnet:%s", err.Error())
