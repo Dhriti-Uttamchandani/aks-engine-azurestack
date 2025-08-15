@@ -218,11 +218,12 @@ func (cli *CLIProvisioner) provision() error {
 		}
 	}
 
+	// Create account config for existing VNET's resource group
+	existingVnetAccount := *cli.Account
+	existingVnetAccount.ResourceGroup.Name = cli.ExistingVNETResourceGroup
+	existingVnetAccount.ResourceGroup.Location = cli.ExistingVNETLocation
+
 	if cli.ExistingVNET {
-		// Create account config for existing VNET's resource group
-		existingVnetAccount := *cli.Account
-		existingVnetAccount.ResourceGroup.Name = cli.ExistingVNETResourceGroup
-		existingVnetAccount.ResourceGroup.Location = cli.ExistingVNETLocation
 		vnetName = cli.ExistingVNETName
 		// Subnet IDs point to existing VNET's resource group, but cluster stays in its own RG
 		masterSubnetID = fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s", existingVnetAccount.SubscriptionID, existingVnetAccount.ResourceGroup.Name, vnetName, masterSubnetName)
@@ -537,8 +538,13 @@ func (cli *CLIProvisioner) CleanupCreatedSubnets() error {
 
 	log.Printf("Cleaning up subnets from VNET %s", cli.ExistingVNETName)
 
-	// Get list of custom subnets
-	customSubnets, err := cli.Account.GetCustomSubnets(cli.ExistingVNETName)
+	// Create account config for existing VNET's resource group for cleanup
+	existingVnetAccount := *cli.Account
+	existingVnetAccount.ResourceGroup.Name = cli.ExistingVNETResourceGroup
+	existingVnetAccount.ResourceGroup.Location = cli.ExistingVNETLocation
+
+	// Get list of custom subnets using the correct resource group
+	customSubnets, err := existingVnetAccount.GetCustomSubnets(cli.ExistingVNETName)
 	if err != nil {
 		return errors.Errorf("Failed to get custom subnets from VNET %s: %v", cli.ExistingVNETName, err)
 	}
@@ -553,7 +559,7 @@ func (cli *CLIProvisioner) CleanupCreatedSubnets() error {
 	// Delete subnets sequentially
 	for _, subnet := range customSubnets {
 		log.Printf("Deleting subnet: %s", subnet)
-		err := cli.Account.DeleteSubnet(cli.ExistingVNETName, subnet)
+		err := existingVnetAccount.DeleteSubnet(cli.ExistingVNETName, subnet)
 		if err != nil {
 			log.Printf("Warning: Failed to delete subnet %s: %v", subnet, err)
 		} else {
