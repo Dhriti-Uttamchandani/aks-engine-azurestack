@@ -287,10 +287,6 @@ func teardown() {
 		}
 	}
 	if cfg.CleanUpOnExit {
-		// Clean up created subnets (only for existing VNET scenarios)
-		if err := cliProvisioner.CleanupCreatedSubnets(); err != nil {
-			log.Printf("Warning: Failed to cleanup created subnets: %v", err)
-		}
 		// Delete resource groups, but skip the existing VNET resource group
 		for _, rg := range rgs {
 			if cliProvisioner.ExistingVNETResourceGroup != "" && rg == cliProvisioner.ExistingVNETResourceGroup {
@@ -298,7 +294,12 @@ func teardown() {
 				continue
 			}
 			log.Printf("Deleting Group: %s\n", rg)
-			acct.DeleteGroup(rg, false)
+			acct.DeleteGroup(rg, true) // Wait for deletion to complete
+		}
+		
+		// Clean up created subnets after resource groups are deleted (only for existing VNET scenarios)
+		if err := cliProvisioner.CleanupCreatedSubnets(); err != nil {
+			log.Printf("Warning: Failed to cleanup created subnets: %v", err)
 		}
 		// Delete once we reuse the cluster group for the connectedCluster resource
 		for _, addon := range eng.ClusterDefinition.Properties.OrchestratorProfile.KubernetesConfig.Addons {

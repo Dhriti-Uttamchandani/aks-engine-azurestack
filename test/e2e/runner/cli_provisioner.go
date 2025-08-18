@@ -559,7 +559,11 @@ func (cli *CLIProvisioner) CleanupCreatedSubnets() error {
 	// Delete subnets sequentially
 	for _, subnet := range customSubnets {
 		log.Printf("Deleting subnet: %s", subnet)
-		err := existingVnetAccount.DeleteSubnet(cli.ExistingVNETName, subnet)
+		err := existingVnetAccount.ClearSubnetNSGAssociation(cli.ExistingVNETName, subnet)
+		if err != nil {
+			log.Printf("Warning: Failed to delete NSG from subnet %s: %v", subnet, err)
+		}
+		err = existingVnetAccount.DeleteSubnet(cli.ExistingVNETName, subnet)
 		if err != nil {
 			log.Printf("Warning: Failed to delete subnet %s: %v", subnet, err)
 		} else {

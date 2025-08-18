@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Azure/aks-engine-azurestack/test/e2e/engine"
@@ -470,6 +471,87 @@ func (a *Account) CreateSubnet(vnet, subnetName, subnetPrefix string) error {
 	if err != nil {
 		log.Printf("Error while trying to create subnet in vnet with the following command:\n az network vnet subnet create -g %s --vnet-name %s --name %s --address-prefix %s \n Output:%s\n", a.ResourceGroup.Name, vnet, subnetName, subnetPrefix, out)
 		return err
+	}
+	return nil
+}
+
+func (a *Account) ClearSubnetNSGAssociation(vnet, subnetName string) error {
+	nsgID, err := a.GetSubnetNSG(vnet, subnetName)
+	if err != nil {
+		return err
+	}
+	
+	if nsgID == "" {
+		log.Printf("No NSG associated with subnet %s", subnetName)
+		return nil
+	}
+	
+	log.Printf("Removing NSG %s from subnet %s", nsgID, subnetName)
+	
+	if err := a.RemoveNSGFromSubnet(vnet, subnetName); err != nil {
+		return err
+	}
+	
+	if err := a.DeleteNSG(nsgID); err != nil {
+		return err
+	}
+	
+	log.Printf("Successfully removed and deleted NSG %s", nsgID)
+	return nil
+}
+
+// GetSubnetNSG retrieves the NSG ID associated with a subnet
+func (a *Account) GetSubnetNSG(vnet, subnetName string) (string, error) {
+	var cmd *exec.Cmd
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "vnet", "subnet", "show", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName, "--query", "networkSecurityGroup.id", "-o", "tsv")
+	} else {
+		cmd = exec.Command("az", "network", "vnet", "subnet", "show", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName, "--query", "networkSecurityGroup.id", "-o", "tsv")
+	}
+	
+	util.PrintCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("error checking NSG for subnet %s: %v", subnetName, err)
+	}
+	
+	return strings.TrimSpace(string(out)), nil
+}
+
+// RemoveNSGFromSubnet removes NSG association from a subnet
+func (a *Account) RemoveNSGFromSubnet(vnet, subnetName string) error {
+	var cmd *exec.Cmd
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "vnet", "subnet", "update", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName, "--network-security-group", "")
+	} else {
+		cmd = exec.Command("az", "network", "vnet", "subnet", "update", "-g",
+			a.ResourceGroup.Name, "--vnet-name", vnet, "--name", subnetName, "--network-security-group", "")
+	}
+	
+	util.PrintCommand(cmd)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error removing NSG from subnet %s: %v", subnetName, err)
+	}
+	return nil
+}
+
+// DeleteNSG deletes a network security group by ID
+func (a *Account) DeleteNSG(nsgID string) error {
+	var cmd *exec.Cmd
+	if a.TimeoutCommands {
+		cmd = exec.Command("timeout", "60", "az", "network", "nsg", "delete", "-g",
+			a.ResourceGroup.Name, "--ids", nsgID)
+	} else {
+		cmd = exec.Command("az", "network", "nsg", "delete", "-g",
+			a.ResourceGroup.Name, "--ids", nsgID)
+	}
+	
+	util.PrintCommand(cmd)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error deleting NSG %s: %v", nsgID, err)
 	}
 	return nil
 }
